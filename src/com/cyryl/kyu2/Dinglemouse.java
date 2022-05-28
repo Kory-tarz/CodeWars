@@ -27,6 +27,9 @@ public class Dinglemouse {
 
     public static int trainCrash(final String track, final String aTrain, final int aTrainPos, final String bTrain, final int bTrainPos, final int limit) {
 
+        System.out.println(aTrain + " " + aTrainPos);
+        System.out.println(bTrain + " " + bTrainPos);
+
         System.out.println(track);
         System.out.println();
         System.out.println();;
@@ -37,16 +40,23 @@ public class Dinglemouse {
         trains[0] = createTrain(board, aTrain, aTrainPos);
         trains[1] = createTrain(board, bTrain, bTrainPos);
 
+        if(isInitialCollision(trains)){
+            return 0;
+        }
+
         int timer = 0;
         boolean collision = false;
 
         print(board, trains[0], trains[1]);
 
-        while (timer < limit && !collision){
+        while (timer <= limit){
             collision = trains[0].checkCollisions(trains[1]);
             collision = collision || trains[1].checkCollisions(trains[0]);
 
-            if(!collision) {
+            if(collision){
+                print(board, trains[0], trains[1]);
+                return timer;
+            }else{
                 timer++;
                 for (int i = 0; i < trains.length; i++)
                     trains[i].move(board);
@@ -54,7 +64,17 @@ public class Dinglemouse {
         }
         print(board, trains[0], trains[1]);
 
-        return collision ? timer : -1;
+        return -1;
+    }
+
+    private static boolean isInitialCollision(Train[] trains) {
+        for(int i=0; i<trains.length; i++){
+            for(int j=i; j<trains.length; j++){
+                if(trains[i].initialCrash(trains[j], i==j ? 1 : 0))
+                    return true;
+            }
+        }
+        return false;
     }
 
     public static void print(char[][] board, Train a, Train b){
@@ -96,7 +116,7 @@ public class Dinglemouse {
 
     private static Train createTrain(char[][] board, String trainInfo, int trainPos){
         Point start = findTrackZero(board);
-        int[] trainData = findNextTrain(board, start, trainPos, 0);
+        int[] trainData = findNextTrain(board, start, trainPos, 7);
 
         return new Train(board,trainInfo, new Point(trainData[0], trainData[1]), trainData[2]);
     }
@@ -150,7 +170,7 @@ public class Dinglemouse {
     private static boolean isDiagonalTrackMatching(char[][] board, int x, int y, int dir){
         if(x >= board.length || x < 0 || y >= board[x].length || y < 0)
             return false;
-        return (TRACKS[dir] == board[x][y]);
+        return (TRACKS[dir] == board[x][y] || board[x][y] == JUNCTION_STRAIGHT);
     }
 
     private static int getNextDir(int dir){
@@ -215,7 +235,7 @@ public class Dinglemouse {
         public Train(char[][] board, String train, Point pos, int trackDir){
             body = new Point[train.length()];
             body[HEAD] = pos;
-            waitTimer = board[pos.x][pos.y] == STATION ? 0 : -1;
+            waitTimer = board[pos.x][pos.y] == STATION ? 1 : 0;
             clockwiseDir = Character.isLowerCase(train.charAt(0));
             express = Character.toLowerCase(train.charAt(0)) == EXPRESS;
             this.setBody(board, trackDir);
@@ -228,6 +248,7 @@ public class Dinglemouse {
             trackDir = dirToNextTrack(board, body[HEAD], trackDir);
             Point currPart = goToNextTrack(board, body[HEAD], trackDir);
             trackDir = trackDirection(board, currPart, trackDir);
+
             for(int i=1; i<body.length; i++){
                 body[i] = currPart;
                 trackDir = dirToNextTrack(board, currPart, trackDir);
@@ -250,9 +271,6 @@ public class Dinglemouse {
             }
             if(waitTimer > 0)
                 return;
-
-//            System.out.println("MY P: " + body[HEAD] + " BOARD IS: " + board[body[HEAD].x][body[HEAD].y]);
-//            System.out.println("MOVING IN DIR: " + DIRS[dir][DIR_X] + ", " + DIRS[dir][DIR_Y]);
 
             dir = dirToNextTrack(board, body[HEAD], dir);
             Point head = goToNextTrack(board, body[HEAD], dir);
@@ -280,6 +298,21 @@ public class Dinglemouse {
             for(int i=1; i< body.length; i++)
                 if(head.equals(body[i]))
                     return true;
+            return false;
+        }
+
+        public boolean initialCrash(Train otherTrain, int allowedDuplicates){
+            int dupCount;
+
+            for(Point curr : body){
+                dupCount = 0;
+                for(Point other: otherTrain.body){
+                    if(curr.equals(other))
+                        dupCount++;
+                }
+                if(dupCount > allowedDuplicates)
+                    return true;
+            }
             return false;
         }
     }
