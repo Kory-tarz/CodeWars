@@ -33,10 +33,8 @@ public class DinglemouseTest {
                 "              |                            |               \n" +
                 "              \\----------------------------/               \n";
 
-//        String trainA = "aaaA";
         String trainA = "Aaaa";
-        int posA = 2;
-        //int posA = 147;
+        int posA = 147;
         String trainB = "Bbbbbbbbbbb";
         int posB = 288;
         int limit = 1000;

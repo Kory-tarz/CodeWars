@@ -21,6 +21,7 @@ public class Dinglemouse {
     private static final int DOWN_RIGHT = 1;
 
     private static final int[][] DIRS = {{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0},{-1,1}};
+    private static final char[] TRACKS = { '-', '\\', '|', '/', '-', '\\', '|', '/'}; // tracks corresponding to directions;
     private static final int DIR_X = 0;
     private static final int DIR_Y = 1;
 
@@ -47,12 +48,9 @@ public class Dinglemouse {
 
             if(!collision) {
                 timer++;
-                for (int i = 0; i < trains.length-1; i++)
+                for (int i = 0; i < trains.length; i++)
                     trains[i].move(board);
             }
-            print(board, trains[0], trains[1]);
-            if(timer > 20)
-                return -1;
         }
         print(board, trains[0], trains[1]);
 
@@ -116,28 +114,43 @@ public class Dinglemouse {
         int trackDir = dir;
 
         while(cell != cellNr) {
-            curr = nextTrack(board, curr, trackDir);
+            trackDir = dirToNextTrack(board, curr, trackDir);
+            curr = goToNextTrack(board, curr, trackDir);
             trackDir = trackDirection(board, curr, trackDir);
             cell++;
         }
         return new int[]{curr.x, curr.y, trackDir};
     }
 
-    private static Point nextTrack(char[][] board, Point prev, int trackDir){
+    private static Point goToNextTrack(char[][] board, Point prev, int dir){
+        return new Point(prev.x + DIRS[dir][DIR_X], prev.y + DIRS[dir][DIR_Y]);
+    }
+
+    private static int dirToNextTrack(char[][] board, Point prev, int trackDir){
 
         if(trackDir % 2 == 1){ // diagonal direction
             // first check straight paths if they exist it is only possible to get there from prev track
-
-            if(!isEmpty(board, prev.x + DIRS[getNextDir(trackDir)][DIR_X], prev.y + DIRS[getNextDir(trackDir)][DIR_Y])) {
-                return new Point(prev.x + DIRS[getNextDir(trackDir)][DIR_X], prev.y + DIRS[getNextDir(trackDir)][DIR_Y]);
+            int nextX = prev.x + DIRS[getNextDir(trackDir)][DIR_X];
+            int nextY = prev.y + DIRS[getNextDir(trackDir)][DIR_Y];
+            if(isDiagonalTrackMatching(board, nextX, nextY, getNextDir(trackDir))){
+                return getNextDir(trackDir);
             }
-            if(!isEmpty(board, prev.x + DIRS[trackDir-1][DIR_X], prev.y + DIRS[trackDir-1][DIR_Y])) {
-                return new Point(prev.x + DIRS[trackDir-1][DIR_X], prev.y + DIRS[trackDir-1][DIR_Y]);
+
+            nextX = prev.x + DIRS[trackDir-1][DIR_X];
+            nextY = prev.y + DIRS[trackDir-1][DIR_Y];
+            if(isDiagonalTrackMatching(board, nextX, nextY, trackDir-1)){
+                return trackDir-1;
             }
             // else continue diagonally is the only option
         }
         // continue straight or continue diagonally
-        return new Point(prev.x + DIRS[trackDir][DIR_X], prev.y + DIRS[trackDir][DIR_Y]);
+        return trackDir;
+    }
+
+    private static boolean isDiagonalTrackMatching(char[][] board, int x, int y, int dir){
+        if(x >= board.length || x < 0 || y >= board[x].length || y < 0)
+            return false;
+        return (TRACKS[dir] == board[x][y]);
     }
 
     private static int getNextDir(int dir){
@@ -212,11 +225,14 @@ public class Dinglemouse {
             dir = clockwiseDir ? trackDir : reverseDir(trackDir); // direction of a train
 
             trackDir = reverseDir(dir); // carriages are in opposite direction to train movement
-            Point currPart = nextTrack(board, body[HEAD], trackDir);
+            trackDir = dirToNextTrack(board, body[HEAD], trackDir);
+            Point currPart = goToNextTrack(board, body[HEAD], trackDir);
+            trackDir = trackDirection(board, currPart, trackDir);
             for(int i=1; i<body.length; i++){
                 body[i] = currPart;
+                trackDir = dirToNextTrack(board, currPart, trackDir);
+                currPart = goToNextTrack(board, currPart, trackDir);
                 trackDir = trackDirection(board, currPart, trackDir);
-                currPart = nextTrack(board, currPart, trackDir);
             }
         }
 
@@ -235,10 +251,13 @@ public class Dinglemouse {
             if(waitTimer > 0)
                 return;
 
-            System.out.println("MY P: " + body[HEAD] + " BOARD IS: " + board[body[HEAD].x][body[HEAD].y]);
-            System.out.println("MOVING IN DIR: " + DIRS[dir][DIR_X] + ", " + DIRS[dir][DIR_Y]);
-            Point head = nextTrack(board, body[HEAD], dir);
+//            System.out.println("MY P: " + body[HEAD] + " BOARD IS: " + board[body[HEAD].x][body[HEAD].y]);
+//            System.out.println("MOVING IN DIR: " + DIRS[dir][DIR_X] + ", " + DIRS[dir][DIR_Y]);
+
+            dir = dirToNextTrack(board, body[HEAD], dir);
+            Point head = goToNextTrack(board, body[HEAD], dir);
             dir = trackDirection(board, head, dir);
+
             for(int i=body.length-1; i>0; i--){
                 body[i] = body[i-1];
             }
