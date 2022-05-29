@@ -15,15 +15,8 @@ public class Dinglemouse {
     private static final char JUNCTION_X= 'X';
     private static final char STATION = 'S';
 
-    private static final int UP_RIGHT = 7;
-    private static final int UP_LEFT = 5;
-    private static final int DOWN_LEFT = 3;
-    private static final int DOWN_RIGHT = 1;
-
-    private static final int[][] DIRS = {{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0},{-1,1}};
-    private static final char[] TRACKS = { '-', '\\', '|', '/', '-', '\\', '|', '/'}; // tracks corresponding to directions;
-    private static final int DIR_X = 0;
-    private static final int DIR_Y = 1;
+    private static final int NO_COLLISIONS = -1;
+    private static final int INITIAL_COLLISION = 0;
 
     public static int trainCrash(final String track, final String aTrain, final int aTrainPos, final String bTrain, final int bTrainPos, final int limit) {
 
@@ -34,25 +27,39 @@ public class Dinglemouse {
         trains[1] = createTrain(board, bTrain, bTrainPos);
 
         if(isInitialCollision(trains)){
-            return 0;
+            return INITIAL_COLLISION;
         }
 
         int timer = 0;
         boolean collision;
 
         while (timer <= limit){
-            collision = trains[0].checkCollisions(trains[1]);
-            collision = collision || trains[1].checkCollisions(trains[0]);
 
+            collision = checkAllCollisions(trains);
             if(collision){
                 return timer;
             }else{
+                moveAllTrains(board, trains);
                 timer++;
-                for (int i = 0; i < trains.length; i++)
-                    trains[i].move(board);
             }
         }
-        return -1;
+        return NO_COLLISIONS;
+    }
+
+    private static boolean checkAllCollisions(Train[] trains){
+        boolean collision = false;
+        for(int currTrain=0; currTrain<trains.length; currTrain++){
+            for (int otherTrain = 0; otherTrain<trains.length; otherTrain++){
+                if(currTrain != otherTrain)
+                    collision = collision || trains[currTrain].checkCollisions(trains[otherTrain]);
+            }
+        }
+        return collision;
+    }
+
+    private static void moveAllTrains(char[][] board, Train[] trains){
+        for (Train train : trains)
+            train.move(board);
     }
 
     private static boolean isInitialCollision(Train[] trains) {
@@ -103,8 +110,8 @@ public class Dinglemouse {
 
     private static Train createTrain(char[][] board, String trainInfo, int trainPos){
         Point start = findTrackZero(board);
-        Track trainTrack = findNextTrain(board, start, trainPos, UP_RIGHT);
-
+        // first track we find is always '/' and we count tracks clockwise
+        Track trainTrack = findNextTrain(board, start, trainPos, Directions.UP_RIGHT);
         return new Train(board,trainInfo, trainTrack.getPosition(), trainTrack.getDirection());
     }
 
@@ -126,80 +133,80 @@ public class Dinglemouse {
         return currTrack;
     }
 
-//    private static Point goToNextTrack(char[][] board, Point prev, int dir){
-//        return new Point(prev.x + DIRS[dir][DIR_X], prev.y + DIRS[dir][DIR_Y]);
-//    }
 
-//    private static int dirToNextTrack(char[][] board, Point prev, int trackDir){
-//
-//        if(trackDir % 2 == 1){ // diagonal direction
-//            // first check straight paths if they exist it is only possible to get there from prev track
-//            int nextX = prev.x + DIRS[getNextDir(trackDir)][DIR_X];
-//            int nextY = prev.y + DIRS[getNextDir(trackDir)][DIR_Y];
-//            int newDirection = getNextDir(trackDir);
-//            if(isDiagonalTrackMatching(board, nextX, nextY, newDirection)){
-//                return newDirection;
-//            }
-//
-//            nextX = prev.x + DIRS[trackDir-1][DIR_X];
-//            nextY = prev.y + DIRS[trackDir-1][DIR_Y];
-//            newDirection = trackDir-1;
-//            if(isDiagonalTrackMatching(board, nextX, nextY, newDirection)){
-//                return newDirection;
-//            }
-//            // else continue diagonally is the only option
-//        }
-//        // continue straight or continue diagonally
-//        return trackDir;
-//    }
+    private static class Directions{
 
-//    private static boolean isDiagonalTrackMatching(char[][] board, int x, int y, int dir){
-//        if(x >= board.length || x < 0 || y >= board[x].length || y < 0)
-//            return false;
-//        return (TRACKS[dir] == board[x][y] || board[x][y] == JUNCTION_STRAIGHT);
-//    }
+        /*
+        DIRS array:
+                           (-1,0)[6]
+                 (-1,-1)[5]   |    (-1,1)[7]
+                           \  |  /
+               (0,-1)[4] ---  +  ---  (0,1)[0]
+                           /  |  \
+                  (1,-1)[3]   |     (1,1)[1]
+                            (1,0)[2]
+         */
+        private static final int[][] DIRS = {{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0},{-1,1}};
+        private static final char[] TRACKS = { '-', '\\', '|', '/', '-', '\\', '|', '/'}; // tracks corresponding to directions;
 
-    private static int getNextDir(int dir){
-        return (dir+1)%DIRS.length;
-    }
+        public static final int UP_RIGHT = 7;
+        public static final int UP_LEFT = 5;
+        public static final int DOWN_LEFT = 3;
+        public static final int DOWN_RIGHT = 1;
+        private static final int DIR_X = 0;
+        private static final int DIR_Y = 1;
 
-    private static int reverseDir(int dir){
-        return (dir+4)%DIRS.length; // equal to -1 * DIRS
-    }
+        private Directions(){}
 
-//    private static int adjustDirectionToCurrentTrack(char[][] board, Point track, int reachingDir){
-//        switch (board[track.x][track.y]){
-//            case LEFT_TURN:
-//                if(DOWN_RIGHT-1 <= reachingDir && reachingDir <= DOWN_RIGHT+1) // we came from the top
-//                    return DOWN_RIGHT;
-//                else // we are coming from the bottom
-//                    return UP_LEFT;
-//            case RIGHT_TURN:
-//                if(DOWN_LEFT-1 <= reachingDir && reachingDir <= DOWN_LEFT+1) // we came from the top
-//                    return DOWN_LEFT;
-//                else
-//                    return UP_RIGHT;
-//            case HORIZONTAL: // check horizontal and vertical track if they appear after turn
-//                if(reachingDir % 2 == 0)
-//                    return reachingDir;
-//                else
-//                    return findDirId(0, DIRS[reachingDir][DIR_Y]); // keep only direction of a track
-//            case VERTICAL:
-//                if(reachingDir % 2 == 0)
-//                    return reachingDir;
-//                else
-//                    return findDirId(DIRS[reachingDir][DIR_X], 0);
-//            default:
-//                return reachingDir; // other tracks lead only in one direction
-//        }
-//    }
-
-    private static int findDirId(int x, int y) {
-        for(int i=0; i<DIRS.length; i++){
-            if(DIRS[i][DIR_X] == x && DIRS[i][DIR_Y] == y)
-                return i;
+        public static int getDirX(int dir){
+            return DIRS[dir][DIR_X];
         }
-        return -1; // bad input
+
+        public static int getDirY(int dir){
+            return DIRS[dir][DIR_Y];
+        }
+
+        public static int findDirId(int x, int y) {
+            for(int i=0; i<DIRS.length; i++){
+                if(DIRS[i][DIR_X] == x && DIRS[i][DIR_Y] == y)
+                    return i;
+            }
+            return -1; // bad input
+        }
+
+        public static int reverseDir(int dir){
+            return (dir+4)%DIRS.length; // equal to -1 * DIRS
+        }
+
+        public static int getNextDir(int dir){
+            return (dir+1)%DIRS.length;
+        }
+
+        public static boolean isValidTurn(char c,  int dir){
+            return (TRACKS[dir] == c || c == JUNCTION_STRAIGHT);
+        }
+
+        public static int dirAtTurn(char c, int reachingDir){
+            if(c == LEFT_TURN)
+                return dirAtLeftTurn(reachingDir);
+            else if(c == RIGHT_TURN)
+                return dirAtRightTurn(reachingDir);
+            return reachingDir; // no turn;
+        }
+        public static int dirAtLeftTurn(int reachingDir){
+
+            if(DOWN_RIGHT-1 <= reachingDir && reachingDir <= DOWN_RIGHT+1) // we came from the top
+                return DOWN_RIGHT;
+            else // we are coming from the bottom
+                return UP_LEFT;
+        }
+
+        public static int dirAtRightTurn(int reachingDir){
+            if(DOWN_LEFT-1 <= reachingDir && reachingDir <= DOWN_LEFT+1) // we came from the top
+                return DOWN_LEFT;
+            else
+                return UP_RIGHT;
+        }
     }
 
     private static class Track{
@@ -224,8 +231,8 @@ public class Dinglemouse {
         public Track getNextTrack(char[][] board){
             int directionToNext = dirToNextTrack(board, this);
 
-            int newPosX = posX + DIRS[directionToNext][DIR_X];
-            int newPosY = posY + DIRS[directionToNext][DIR_Y];
+            int newPosX = posX + Directions.getDirX(directionToNext);
+            int newPosY = posY + Directions.getDirY(directionToNext);
 
             int newDirection = adjustDirectionToTrack(board, newPosX, newPosY, directionToNext);
 
@@ -236,16 +243,16 @@ public class Dinglemouse {
 
             if(track.direction % 2 == 1){ // diagonal direction
                 // first check straight paths if they exist it is only possible to get there from prev track
-                int newDirection = getNextDir(track.direction);
-                int nextX = track.posX + DIRS[newDirection][DIR_X];
-                int nextY = track.posY + DIRS[newDirection][DIR_Y];
+                int newDirection = Directions.getNextDir(track.direction);
+                int nextX = track.posX + Directions.getDirX(newDirection);
+                int nextY = track.posY + Directions.getDirY(newDirection);
                 if(isDiagonalTrackMatching(board, nextX, nextY, newDirection)){
                     return newDirection;
                 }
 
                 newDirection = track.direction-1;
-                nextX = track.posX + DIRS[newDirection][DIR_X];
-                nextY = track.posY + DIRS[newDirection][DIR_Y];
+                nextX = track.posX + Directions.getDirX(newDirection);
+                nextY = track.posY + Directions.getDirY(newDirection);
                 if(isDiagonalTrackMatching(board, nextX, nextY, newDirection)){
                     return newDirection;
                 }
@@ -258,31 +265,25 @@ public class Dinglemouse {
         private boolean isDiagonalTrackMatching(char[][] board, int x, int y, int dir){
             if(x >= board.length || x < 0 || y >= board[x].length || y < 0)
                 return false;
-            return (TRACKS[dir] == board[x][y] || board[x][y] == JUNCTION_STRAIGHT);
+            return Directions.isValidTurn(board[x][y], dir);
         }
 
         private int adjustDirectionToTrack(char[][] board, int x, int y, int reachingDir){
             switch (board[x][y]){
                 case LEFT_TURN:
-                    if(DOWN_RIGHT-1 <= reachingDir && reachingDir <= DOWN_RIGHT+1) // we came from the top
-                        return DOWN_RIGHT;
-                    else // we are coming from the bottom
-                        return UP_LEFT;
+                    return Directions.dirAtLeftTurn(reachingDir);
                 case RIGHT_TURN:
-                    if(DOWN_LEFT-1 <= reachingDir && reachingDir <= DOWN_LEFT+1) // we came from the top
-                        return DOWN_LEFT;
-                    else
-                        return UP_RIGHT;
+                    return Directions.dirAtRightTurn(reachingDir);
                 case HORIZONTAL: // check horizontal and vertical track if they appear after turn
                     if(reachingDir % 2 == 0)
                         return reachingDir;
                     else
-                        return findDirId(0, DIRS[reachingDir][DIR_Y]); // keep only direction of a track
+                        return Directions.findDirId(0, Directions.getDirY(reachingDir)); // keep only direction of a track
                 case VERTICAL:
                     if(reachingDir % 2 == 0)
                         return reachingDir;
                     else
-                        return findDirId(DIRS[reachingDir][DIR_X], 0);
+                        return Directions.findDirId(Directions.getDirX(reachingDir), 0);
                 default:
                     return reachingDir; // other tracks lead only in one direction
             }
@@ -307,7 +308,7 @@ public class Dinglemouse {
             clockwiseDir = Character.isLowerCase(train.charAt(0));
             express = Character.toLowerCase(train.charAt(0)) == EXPRESS;
 
-            int dir = clockwiseDir ? trackDir : reverseDir(trackDir); // direction of a train
+            int dir = clockwiseDir ? trackDir : Directions.reverseDir(trackDir); // direction of a train
             engineTrack = new Track(pos.x, pos.y, dir);
 
             this.setBody(board);
@@ -316,7 +317,7 @@ public class Dinglemouse {
         private void setBody(char[][] board){
 
             Point pos = engineTrack.getPosition();
-            Track currTrack = new Track(pos.x, pos.y, reverseDir(engineTrack.getDirection())); // carriages are in opposite direction to train movement
+            Track currTrack = new Track(pos.x, pos.y, Directions.reverseDir(engineTrack.getDirection())); // carriages are in opposite direction to train movement
 
             currTrack = currTrack.getNextTrack(board);
 
