@@ -208,6 +208,22 @@ public class Dinglemouse {
         return -1; // bad input
     }
 
+    private static class Track{
+
+        private int posX;
+        private int posY;
+        private int direction;
+        public Track(int posX, int posY, int direction){
+            this.posX = posX;
+            this.posY = posY;
+            this.direction = direction;
+        }
+
+
+
+    }
+
+
     private static class Train{
 
         private final boolean clockwiseDir;
