@@ -43,6 +43,7 @@ public class Dinglemouse {
                 timer++;
             }
         }
+
         return NO_COLLISIONS;
     }
 
