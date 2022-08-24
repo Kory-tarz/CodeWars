@@ -1,6 +1,8 @@
 package com.cyryl.kyu4;
 
+import java.util.Arrays;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class LongestSlideDown {
 
@@ -36,6 +38,5 @@ public class LongestSlideDown {
 //        }
 //        return pyramid[0][0];
     }
-
 
 }

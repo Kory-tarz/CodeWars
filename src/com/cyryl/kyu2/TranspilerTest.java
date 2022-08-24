@@ -1,5 +1,6 @@
 package com.cyryl.kyu2;
 
+import org.hamcrest.CoreMatchers;
 import org.junit.Assert;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
@@ -16,7 +17,7 @@ public class TranspilerTest{
 
     public void expect(String actual, String expected) {
         assertEquals(expected, actual);
-        //collector.checkThat (expected, CoreMatchers.equalTo (actual));
+        collector.checkThat (expected, CoreMatchers.equalTo (actual));
     }
 
     public void fromTo(String input, String expected) {
