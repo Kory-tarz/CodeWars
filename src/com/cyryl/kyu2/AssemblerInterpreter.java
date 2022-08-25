@@ -7,7 +7,6 @@ public class AssemblerInterpreter {
 
     public static String interpret(final String input) {
         String[] inputs = input.split("\n");
-        Arrays.stream(inputs).forEach(in -> System.out.println("Line: " + in));
         Assembler assembler = new Assembler();
         assembler.runProgram(inputs);
         return assembler.endMessage();
@@ -38,9 +37,18 @@ public class AssemblerInterpreter {
         }
 
         public void runProgram(String[] inputs) {
-            currentLine = 0;
             setupLabels(inputs);
             run(inputs);
+        }
+
+        private void setupLabels(String[] inputs) {
+            int line = 0;
+            for (String inputLine : inputs) {
+                if (isLabel(getLineIgnoringComments(inputLine))) {
+                    setLabel(inputLine.substring(0, inputLine.indexOf(":")).trim(), line);
+                }
+                line++;
+            }
         }
 
         private void run(String[] inputs) {
@@ -50,16 +58,8 @@ public class AssemblerInterpreter {
             }
         }
 
-        private void setupLabels(String[] inputs) {
-            for (String inputLine : inputs) {
-                if (isLabel(getLineIgnoringComments(inputLine))) {
-                    setLabel(inputLine.substring(0, inputLine.indexOf(":")).trim());
-                }
-                currentLine++;
-            }
-            System.out.println("LABELS: ");
-            labels.forEach((key, val) -> System.out.println(key));
-            currentLine = 0;
+        private void setLabel(String label, int line) {
+            labels.put(label, line);
         }
 
         private boolean isLabel(String inputLine) {
@@ -79,12 +79,11 @@ public class AssemblerInterpreter {
         }
 
         private void processCommand(String command) {
-            System.out.println("PROCESSING COMMAND: " + command);
-            int cmdIdx = command.indexOf(" ");
             String cmdName;
             String cmdData;
+            int cmdIdx = command.indexOf(" ");
             if (cmdIdx > 0) {
-                cmdName = (command.substring(0, cmdIdx));
+                cmdName = command.substring(0, cmdIdx);
                 cmdData = getLineIgnoringComments(command.substring(cmdIdx + 1));
             } else {
                 cmdName = command;
@@ -96,9 +95,9 @@ public class AssemblerInterpreter {
                 case "mul" -> readParametersAndAccept(this::mul, cmdData);
                 case "sub" -> readParametersAndAccept(this::sub, cmdData);
                 case "div" -> readParametersAndAccept(this::div, cmdData);
+                case "cmp" -> readParametersAndAccept(this::cmp, cmdData);
                 case "inc" -> inc(cmdData);
                 case "dec" -> dec(cmdData);
-                case "cmp" -> readParametersAndAccept(this::cmp, cmdData);
                 case "jne" -> jumpNotEqual(cmdData);
                 case "je" -> jumpEqual(cmdData);
                 case "jge" -> jumpGreaterEqual(cmdData);
@@ -182,7 +181,6 @@ public class AssemblerInterpreter {
         }
 
         private String clearOutsideApostrophes(String data) {
-            System.out.println("CLEARING THIS ---->>> " + data);
             return data.substring(1, data.length() - 1);
         }
 
@@ -235,11 +233,6 @@ public class AssemblerInterpreter {
             lastComparisonResult = Integer.compare(x.getValue(), y.getValue());
         }
 
-        private void setLabel(String label) {
-            labels.put(label, currentLine);
-        }
-
-        // program will resume after the label no reason to set it again
         private void jumpLabel(String label) {
             currentLine = labels.get(label);
         }
@@ -303,7 +296,7 @@ public class AssemblerInterpreter {
     }
 
     private static class Parameter {
-        private String name;
+        private final String name;
         private Integer value;
         private boolean isValue;
         private final Register register;
