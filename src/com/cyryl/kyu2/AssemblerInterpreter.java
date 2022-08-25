@@ -7,10 +7,10 @@ public class AssemblerInterpreter {
 
     public static String interpret(final String input) {
         String[] inputs = input.split("\n");
-        Arrays.stream(inputs).forEach(in-> System.out.println("Line: " + in));
+        Arrays.stream(inputs).forEach(in -> System.out.println("Line: " + in));
         Assembler assembler = new Assembler();
         assembler.runProgram(inputs);
-        return assembler.endProgram();
+        return assembler.endMessage();
     }
 
     private static class Assembler {
@@ -37,39 +37,44 @@ public class AssemblerInterpreter {
             status = RUNNING;
         }
 
-        public void runProgram(String[] inputs){
+        public void runProgram(String[] inputs) {
             currentLine = 0;
             setupLabels(inputs);
             run(inputs);
         }
 
-        private void run(String[] inputs){
+        private void run(String[] inputs) {
             currentLine = 0;
-
-            while (status == RUNNING && currentLine < inputs.length){
+            while (status == RUNNING && currentLine < inputs.length) {
                 processNewCommand(inputs[currentLine].trim());
             }
         }
 
-        private void setupLabels(String[] inputs){
-            for (String inputLine : inputs){
-                if(inputLine.matches("^\s*[a-zA-Z]+:")){
+        private void setupLabels(String[] inputs) {
+            for (String inputLine : inputs) {
+                if (isLabel(getLineIgnoringComments(inputLine))) {
                     setLabel(inputLine.substring(0, inputLine.indexOf(":")).trim());
                 }
                 currentLine++;
             }
+            System.out.println("LABELS: ");
+            labels.forEach((key, val) -> System.out.println(key));
             currentLine = 0;
         }
 
+        private boolean isLabel(String inputLine) {
+            return inputLine.matches("^\\s*\\w+:\\s*");
+        }
+
         private void processNewCommand(String command) {
-            if(!command.isBlank()) {
+            if (!command.isBlank()) {
                 processCommand(command);
             } else {
                 currentLine++;
             }
         }
 
-        public String endProgram(){
+        public String endMessage() {
             return status == ENDED ? returnMessage : null;
         }
 
@@ -78,9 +83,9 @@ public class AssemblerInterpreter {
             int cmdIdx = command.indexOf(" ");
             String cmdName;
             String cmdData;
-            if(cmdIdx > 0) {
+            if (cmdIdx > 0) {
                 cmdName = (command.substring(0, cmdIdx));
-                cmdData = command.substring(cmdIdx + 1).trim();
+                cmdData = getLineIgnoringComments(command.substring(cmdIdx + 1));
             } else {
                 cmdName = command;
                 cmdData = "";
@@ -103,11 +108,26 @@ public class AssemblerInterpreter {
                 case "call" -> call(cmdData);
                 case "ret" -> ret();
                 case "msg" -> message(cmdData);
-                case ";" -> comment();
+                case ";" -> ignore();
                 case "end" -> end();
-                default -> throw new IllegalArgumentException("Invalid command name: " + command);
+                case "jmp" -> jumpLabel(cmdData);
+                default -> {
+                    if (isLabel(cmdName)) {
+                        ignore();
+                    } else {
+                        throw new IllegalArgumentException("Invalid command name: " + command);
+                    }
+                }
             }
             currentLine++;
+        }
+
+        private String getLineIgnoringComments(String data) {
+            int commentBeginIdx = data.indexOf(";");
+            if (commentBeginIdx > 0) {
+                data = data.substring(0, commentBeginIdx);
+            }
+            return data.trim();
         }
 
         private void readParametersAndAccept(BiConsumer<Parameter, Parameter> cmd, String data) {
@@ -123,32 +143,60 @@ public class AssemblerInterpreter {
             return new Parameter[]{new Parameter(values[0].trim(), register), new Parameter(values[1].trim(), register)};
         }
 
-        private void end(){
+        private void end() {
             status = ENDED;
         }
 
-        private void comment(){
+        private void ignore() {
             // ignore this line
         }
 
-        private void message(String message){
+        private void message(String message) {
             StringBuilder sb = new StringBuilder(returnMessage);
-            //TODO insert params to message here or later
-            sb.append(message);
+            List<String> messageData = splitMessage(message);
+            for (String data : messageData) {
+                String clearData = data.trim();
+                if (clearData.startsWith("'")) {
+                    sb.append(clearOutsideApostrophes(clearData));
+                } else {
+                    sb.append(register.get(clearData));
+                }
+            }
             returnMessage = sb.toString();
         }
 
-        private void ret(){
+        private List<String> splitMessage(String message) {
+            boolean inQuotes = false;
+            List<String> parts = new ArrayList<>();
+            int start = 0;
+            for (int curr = 0; curr < message.length(); curr++) {
+                if (message.charAt(curr) == '\'') {
+                    inQuotes = !inQuotes;
+                } else if (message.charAt(curr) == ',' && !inQuotes) {
+                    parts.add(message.substring(start, curr));
+                    start = curr + 1;
+                }
+            }
+            parts.add(message.substring(start));
+            return parts;
+        }
+
+        private String clearOutsideApostrophes(String data) {
+            System.out.println("CLEARING THIS ---->>> " + data);
+            return data.substring(1, data.length() - 1);
+        }
+
+        private void ret() {
             currentLine = returnLine.removeFirst();
         }
 
-        private void call(String label){
+        private void call(String label) {
             returnLine.offerFirst(currentLine);
             jumpLabel(label);
         }
 
-        private void jumpLess(String label){
-            if(lastComparisonResult == LESS){
+        private void jumpLess(String label) {
+            if (lastComparisonResult == LESS) {
                 jumpLabel(label);
             }
         }
