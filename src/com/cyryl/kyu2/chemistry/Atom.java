@@ -1,14 +1,12 @@
 package com.cyryl.kyu2.chemistry;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;
+import java.util.*;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class Atom implements Comparable<Atom> {
+public class Atom {
     public static final Map<String, Integer> VALENCE_NUMBER = Stream.of(new Object[][]{
             {"H", 1},
             {"B", 3},
@@ -37,6 +35,13 @@ public class Atom implements Comparable<Atom> {
             {"Br", 80.0}
     }).collect(Collectors.toMap(data -> (String) data[0], data -> (Double) data[1]));
 
+    private static final Comparator<Atom> atomComparator = Comparator
+            .comparing((Atom atom) -> atom.element.equals("C") ? 0 : 1)
+            .thenComparing((Atom atom) -> atom.element.equals("O") ? 0 : 1)
+            .thenComparing((Atom atom) -> atom.element.equals("H") ? 0 : -1)
+            .thenComparing(atom -> atom.element)
+            .thenComparingInt(atom -> atom.id);
+
     public static Atom createHydrogen(int id) {
         return new Atom("H", id);
     }
@@ -47,44 +52,55 @@ public class Atom implements Comparable<Atom> {
 
     public int id;
     public String element;
-    private int availableBounds;
-    private TreeSet<Atom> boundAtoms;
+    private int availableBonds;
+    private List<Atom> bondedAtoms;
 
     public Atom(String elt, int id_) {
         element = elt;
         id = id_;
-        availableBounds = VALENCE_NUMBER.get(element);
-        boundAtoms = new TreeSet<>();
+        availableBonds = VALENCE_NUMBER.get(element);
+        bondedAtoms = new ArrayList<>();
     }
 
     public void mutate(String newElement) {
-        int currentBounds = VALENCE_NUMBER.get(element) - availableBounds;
-        int newMaxBounds =  VALENCE_NUMBER.get(newElement);
-        if (newMaxBounds < currentBounds) {
+        int currBonds = VALENCE_NUMBER.get(element) - availableBonds;
+        int newMaxBonds = VALENCE_NUMBER.get(newElement);
+        if (newMaxBonds < currBonds) {
             throw new InvalidBond();
         }
         this.element = newElement;
-        this.availableBounds = newMaxBounds - currentBounds;
+        this.availableBonds = newMaxBonds - currBonds;
     }
 
-    public void boundWith(Atom other) {
-        if (this.availableBounds == 0 || other.availableBounds == 0 || this.equals(other)) {
+    public void bondWith(Atom other) {
+        if (this.availableBonds == 0 || other.availableBonds == 0 || this.equals(other)) {
             throw new InvalidBond();
         }
-        this.availableBounds--;
-        boundAtoms.add(other);
-        other.availableBounds--;
-        other.boundAtoms.add(this);
+        this.availableBonds--;
+        bondedAtoms.add(other);
+        other.availableBonds--;
+        other.bondedAtoms.add(this);
     }
 
-    public List<Atom> getBoundAtoms() {
-        return boundAtoms.stream().toList();
+    public List<Atom> getBondedAtoms() {
+        return bondedAtoms.stream().toList();
     }
 
-    public void addMissingHydrogens(Supplier<Integer> idSupplier) {
-        while (availableBounds > 0) {
-            boundWith(Atom.createHydrogen(idSupplier.get()));
+    public void addMissingHydrogens(Supplier<Atom> atomSupplier) {
+        while (availableBonds > 0) {
+            bondWith(atomSupplier.get());
         }
+    }
+
+    public void removeAllHydrogenBonds() {
+        bondedAtoms.stream().filter(Atom::isHydrogen).forEach(this::removeBond);
+    }
+
+    private void removeBond(Atom bondedAtom) {
+        bondedAtoms = this.getBondedAtoms().stream().filter(Predicate.not(bondedAtom::equals)).collect(Collectors.toList());
+        this.availableBonds++;
+        bondedAtom.bondedAtoms = getBondedAtoms().stream().filter(Predicate.not(this::equals)).collect(Collectors.toList());
+        bondedAtom.availableBonds++;
     }
 
     @Override
@@ -101,16 +117,14 @@ public class Atom implements Comparable<Atom> {
         return false;
     }
 
-    //"Atom(C.24: C1,O6,N2,H)";
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("Atom(").append(element).append(".").append(id);
-        if (boundAtoms.isEmpty()) {
+        if (bondedAtoms.isEmpty()) {
             return sb.append(")").toString();
         }
         sb.append(": ");
-        Iterator<Atom> atomIterator = boundAtoms.descendingIterator();
-        atomIterator.forEachRemaining(atom -> sb.append(atom.toSubString()).append(","));
+        bondedAtoms.stream().sorted(atomComparator).forEach(atom -> sb.append(atom.toSubString()).append(","));
         sb.setLength(sb.length() - 1);
         return sb.append(")").toString();
     }
@@ -125,20 +139,6 @@ public class Atom implements Comparable<Atom> {
 
     public boolean isHydrogen() {
         return element.equals("H");
-    }
-
-    @Override
-    public int compareTo(Atom other) {
-        if (this.element.equals(other.element)) {
-            return Integer.compare(this.id, other.id);
-        }
-        if (this.isHydrogen()) {
-            return 1;
-        }
-        if (other.isHydrogen()) {
-            return -1;
-        }
-        return this.element.compareTo(other.element);
     }
 }
 

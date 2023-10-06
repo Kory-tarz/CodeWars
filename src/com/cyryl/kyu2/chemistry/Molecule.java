@@ -3,6 +3,7 @@ package com.cyryl.kyu2.chemistry;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -17,11 +18,12 @@ public class Molecule {
     private String name;
     private int sequenceId = 1;
     private int atomId = 1;
-    private final Map<Integer, List<Atom>> branchMap = new HashMap<>();
+    private Map<Integer, List<Atom>> branchMap = new HashMap<>();
     private boolean locked = false;
+    private List<Atom> allAtoms = new ArrayList<>();
 
     Molecule() {
-
+        this.name = "";
     }
 
     Molecule(String name) {
@@ -41,6 +43,12 @@ public class Molecule {
                 .mapToObj((branchSize) ->
                         IntStream.range(0, branchSize).mapToObj((nr) -> Atom.createCarbon(getNextAtomId())).toList())
                 .collect(Collectors.toMap((elements) -> getNextBranchId(), Function.identity()));
+        newBranches.values().forEach((atoms -> {
+            allAtoms.addAll(atoms);
+            for (int i = 1; i < atoms.size(); i++) {
+                atoms.get(i).bondWith(atoms.get(i - 1));
+            }
+        }));
         branchMap.putAll(newBranches);
         return this;
     }
@@ -54,25 +62,25 @@ public class Molecule {
     }
 
     /*
-    Creates new bounds between two atoms of existing branches.
+    Creates new bonds between two atoms of existing branches.
     Each argument is a tuple (python), array (ruby/JS), or T object (java) of four integers giving:
         c1 & b1: carbon and branch positions of the first atom
         c2 & b2: carbon and branch positions of the second atom
-    All positions are 1-indexed, meaning (1,1,5,3) will bound the first carbon of the first branch with the fifth of the third branch.
+    All positions are 1-indexed, meaning (1,1,5,3) will bond the first carbon of the first branch with the fifth of the third branch.
     Only positive integers will be used.
      */
-    public Molecule bounder(T... bounds) {
+    public Molecule bounder(T... bonds) {
         if (locked) {
             throw new LockedMolecule();
         }
-        for (T bound : bounds) {
-            int carbonPos1 = bound.c1 - 1;
-            int carbonPos2 = bound.c2 - 1;
-            int branchPos1 = bound.b1;
-            int branchPos2 = bound.b2;
+        for (T bond : bonds) {
+            int carbonPos1 = bond.c1 - 1;
+            int carbonPos2 = bond.c2 - 1;
+            int branchPos1 = bond.b1;
+            int branchPos2 = bond.b2;
             Atom firstAtom = branchMap.get(branchPos1).get(carbonPos1);
             Atom secondAtom = branchMap.get(branchPos2).get(carbonPos2);
-            firstAtom.boundWith(secondAtom);
+            firstAtom.bondWith(secondAtom);
         }
         return this;
     }
@@ -98,7 +106,7 @@ public class Molecule {
 
     /*
     Adds a new Atom of kind elt (string) on the carbon nc in the branch nb.
-    Atoms added this way are not considered as being part of the branch they are bounded to and aren't considered a new branch of the molecule.
+    Atoms added this way are not considered as being part of the branch they are bonded to and aren't considered a new branch of the molecule.
      */
     public Molecule add(T... elements) {
         if (locked) {
@@ -109,7 +117,14 @@ public class Molecule {
             int branchPos = element.nb;
             String newElement = element.elt;
             Atom atom = branchMap.get(branchPos).get(carbonPos);
-            atom.boundWith(new Atom(newElement, getNextAtomId()));
+            Atom newAtom = new Atom(newElement, getNextAtomId());
+            try {
+                atom.bondWith(newAtom);
+            } catch (RuntimeException ex) {
+                this.atomId--;
+                throw ex;
+            }
+            allAtoms.add(newAtom);
         }
         return this;
     }
@@ -131,19 +146,23 @@ public class Molecule {
         try {
             Atom firstAtomInChain = null;
             Atom prevAtom = null;
+            List<Atom> createdAtoms = new ArrayList<>();
             for (String element : elements) {
                 Atom currAtom = new Atom(element, getNextAtomId());
                 if (prevAtom != null) {
-                    prevAtom.boundWith(currAtom);
+                    prevAtom.bondWith(currAtom);
                 } else {
                     firstAtomInChain = currAtom;
                 }
+                createdAtoms.add(currAtom);
                 prevAtom = currAtom;
             }
-            Atom atom = branchMap.get(branchPos).get(carbonPos);
-            atom.boundWith(firstAtomInChain);
+            Atom atom = branchMap.get(branchPos).get(carbonPos - 1);
+            atom.bondWith(firstAtomInChain);
+            allAtoms.addAll(createdAtoms);
         } catch (RuntimeException ex) {
             atomId = idBeforeChaining;
+            throw ex;
         }
         return this;
     }
@@ -155,12 +174,20 @@ public class Molecule {
         if (locked) {
             throw new LockedMolecule();
         }
-        visitAllAtoms(atom -> atom.addMissingHydrogens(this::getNextAtomId));
+        List<Atom> hydrogens = new ArrayList<>();
+        allAtoms.forEach(atom -> atom.addMissingHydrogens(() -> {
+            Atom hydrogen = Atom.createHydrogen(getNextAtomId());
+            hydrogens.add(hydrogen);
+            return hydrogen;
+        }));
+        allAtoms.addAll(hydrogens);
+        locked = true;
         return this;
     }
 
     private void visitAllAtoms(Consumer<Atom> atomConsumer) {
         Set<Atom> visitedAtoms = new HashSet<>();
+        branchMap.values().stream().flatMap(Collection::stream).forEach(atom -> visitBranch(visitedAtoms, atom, atomConsumer));
     }
 
     private void visitBranch(Set<Atom> visited, Atom currAtom, Consumer<Atom> atomConsumer) {
@@ -168,8 +195,8 @@ public class Molecule {
             return;
         }
         visited.add(currAtom);
+        currAtom.getBondedAtoms().forEach(atom -> visitBranch(visited, atom, atomConsumer));
         atomConsumer.accept(currAtom);
-        currAtom.getBoundAtoms().forEach(atom -> visitBranch(visited, atom, atomConsumer));
     }
 
     /*
@@ -185,8 +212,41 @@ public class Molecule {
         if (!locked) {
             throw new UnlockedMolecule();
         }
+        removeHydrogens();
+        removeEmptyBranches();
+        if (branchMap.isEmpty()) {
+            throw new EmptyMolecule();
+        }
+        recalculateBranchIds();
+        recalculateAtomIds();
         locked = false;
         return this;
+    }
+
+    private void removeHydrogens() {
+        allAtoms.forEach(Atom::removeAllHydrogenBonds);
+        allAtoms = allAtoms.stream().filter(Predicate.not(Atom::isHydrogen)).collect(Collectors.toList());
+        branchMap.keySet()
+                .forEach(key -> branchMap.put(key, branchMap.get(key).stream().filter(atom -> !atom.isHydrogen()).toList()));
+    }
+
+    private void removeEmptyBranches() {
+        branchMap = branchMap.entrySet().stream()
+                .filter(entry -> !entry.getValue().isEmpty()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private void recalculateBranchIds() {
+        sequenceId = 1;
+        Map<Integer, List<Atom>> newBranchMap = new HashMap<>();
+        branchMap.keySet().stream().sorted().forEach(key -> newBranchMap.put(getNextBranchId(), branchMap.get(key)));
+        branchMap = newBranchMap;
+    }
+
+    private void recalculateAtomIds() {
+        this.atomId = 1;
+        for (Atom atom : getAtoms()) {
+            atom.id = getNextAtomId();
+        }
     }
 
 
@@ -196,9 +256,7 @@ public class Molecule {
             throw new UnlockedMolecule();
         }
         Map<String, Integer> count = new HashMap<>();
-        Set<Atom> visitedAtoms = new HashSet<>();
-        visitAllAtoms(atom -> count.put(atom.element, count.getOrDefault(atom.element, 0) + 1));
-        branchMap.values().stream().flatMap(Collection::stream).forEach(atom -> countElements(count, visitedAtoms, atom));
+        allAtoms.forEach(atom -> count.put(atom.element, count.getOrDefault(atom.element, 0) + 1));
         StringBuilder formula = new StringBuilder();
         count.keySet().stream().sorted(elementComparator).forEach(element -> {
             formula.append(element);
@@ -210,59 +268,21 @@ public class Molecule {
         return formula.toString();
     }
 
-    private void countElements(Map<String, Integer> count, Set<Atom> visited, Atom currAtom) {
-        if (visited.contains(currAtom)) {
-            return;
-        }
-        visited.add(currAtom);
-        count.put(currAtom.element, count.getOrDefault(currAtom.element, 0) + 1);
-        currAtom.getBoundAtoms().forEach(atom -> countElements(count, visited, atom));
-    }
-
-    //To get the value of the molecular weight of the final molecule in g/mol, as a double valu
+    //To get the value of the molecular weight of the final molecule in g/mol, as a double value
     public double getMolecularWeight() {
         if (!locked) {
             throw new UnlockedMolecule();
         }
-        Set<Atom> visitedAtoms = new HashSet<>();
-        return branchMap.values().stream().flatMap(Collection::stream)
-                .mapToDouble(atom -> calculateMolecularWeight(atom, visitedAtoms))
-                .sum();
-    }
-
-    private double calculateMolecularWeight(Atom currAtom, Set<Atom> visited) {
-        if (visited.contains(currAtom)) {
-            return 0d;
-        }
-        visited.add(currAtom);
-        double molecularWeight = Atom.ATOMIC_WEIGHT.get(currAtom.element);
-        molecularWeight += currAtom.getBoundAtoms().stream()
-                .mapToDouble(atom -> calculateMolecularWeight(atom, visited))
-                .sum();
-        return molecularWeight;
+        var context = new Object() {
+            Double molecularWeight = 0d;
+        };
+        allAtoms.forEach(atom -> context.molecularWeight += Atom.ATOMIC_WEIGHT.get(atom.element));
+        return context.molecularWeight;
     }
 
     //To get a list of Atom objects. Atoms are appended to the list in the order of their creation:
     public List<Atom> getAtoms() {
-        if (!locked) {
-            throw new UnlockedMolecule();
-        }
-        Set<Atom> visitedAtoms = new HashSet<>();
-        return branchMap.values().stream()
-                .flatMap(Collection::stream)
-                .flatMap(atom -> getAllBoundAtoms(atom, visitedAtoms).stream())
-                .sorted(Comparator.comparingInt(atom -> atom.id)).toList();
-    }
-
-    private List<Atom> getAllBoundAtoms(Atom currAtom, Set<Atom> visited) {
-        List<Atom> result = new ArrayList<>();
-        if (visited.contains(currAtom)) {
-            return result;
-        }
-        visited.add(currAtom);
-        result.add(currAtom);
-        result.addAll(currAtom.getBoundAtoms().stream().flatMap(atom -> getAllBoundAtoms(currAtom, visited).stream()).toList());
-        return result;
+        return allAtoms.stream().sorted(Comparator.comparingInt(atom -> atom.id)).toList();
     }
 
     //To get the name of the molecule, as a string of course, if given in the constructor
@@ -273,7 +293,7 @@ public class Molecule {
 }
 
 /*
-An InvalidBond exception should be thrown each time you encounter a case where an atom exceeds its valence number or is bounded to itself
+An InvalidBond exception should be thrown each time you encounter a case where an atom exceeds its valence number or is bonded to itself
  */
 class InvalidBond extends RuntimeException {
 }
@@ -287,7 +307,7 @@ class EmptyMolecule extends RuntimeException {
 
 /*
 The fields formula and molecular_weight or the associated getters (depending on your language) should throw an UnlockedMolecule exception
- if an user tries to access them while the molecule isn't locked (because we do not want the user to catch incomplete/invalid information).
+ if a user tries to access them while the molecule isn't locked (because we do not want the user to catch incomplete/invalid information).
  */
 class UnlockedMolecule extends RuntimeException {
 
